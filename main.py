@@ -1,9 +1,9 @@
-from app import P2PChat
+from app import Chat
 
 
 def main():
     """Main function to run the P2P chat."""
-    chat_app = P2PChat()
+    chat_app = Chat()
     chat_app.run()
 
 

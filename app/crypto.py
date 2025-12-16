@@ -10,25 +10,13 @@ from app.ui import ConsoleWindow
 
 
 class Crypto:
-    """
-    A class for cryptographic-related functions, such as generating large primes.
-    """
-
-    def _gcd(self, a, b):
-        """Helper function to compute the greatest common divisor."""
-        return math.gcd(a, b)
-
     def _is_prime_miller_rabin(self, n, num_rounds=40):
-        """
-        Test if a number is prime using the Miller-Rabin primality test.
-        This implementation is structured to match the theory in the SOP.
-        """
         if n == 2 or n == 3:
             return True
         if n <= 1 or n % 2 == 0:
             return False
 
-        # Write n-1 as 2^k * q where q is odd
+        #n-1 = 2^k * q
         q = n - 1
         k = 0
         while q % 2 == 0:
@@ -59,86 +47,53 @@ class Crypto:
         return True
 
     def generate_prime(self, bit_length=1024):
-        """
-        Generate a large prime number of a specified bit length.
-        """
         while True:
             p = random.getrandbits(bit_length)
-            # Ensure MSB is 1 for correct bit length, and LSB is 1 for odd number
+            
             p |= (1 << bit_length - 1) | 1
 
             if self._is_prime_miller_rabin(p):
                 return p
 
 
-class CryptoKey(Crypto):
-    """
-    A base class for cryptographic keys, inheriting prime generation from Crypto.
-    """
-
-    def __init__(self):
-        super().__init__()
+class RSAKey:
+    def __init__(self, bit_length=2048, message_window=None):
+        self.message_window = message_window or ConsoleWindow()
         self.public_key = None
         self.private_key = None
-
-    def save_public_key(self, filename="public_key.pem"):
-        """Saves the public key to a file."""
-        raise NotImplementedError("This method should be implemented by subclasses.")
-
-    def save_private_key(self, filename="private_key.pem"):
-        """Saves the private key to a file."""
-        raise NotImplementedError("This method should be implemented by subclasses.")
-
-
-class RSAKey(CryptoKey):
-    """
-    Represents an RSA key pair, with generation and saving capabilities,
-    matching the theory from the SOP.
-    """
-
-    def __init__(self, bit_length=2048, message_window=None):
-        super().__init__()
-        self.message_window = message_window or ConsoleWindow()
         if bit_length:
             self._generate_keys(bit_length)
 
     def _generate_keys(self, bit_length):
-        """Generates the RSA public and private keys based on SOP theory."""
         p = self.generate_prime(bit_length // 2)
         q = self.generate_prime(bit_length // 2)
         while p == q:
             q = self.generate_prime(bit_length // 2)
 
         n = p * q
-        g = self._gcd(p - 1, q - 1)
+        g = math.gcd(p - 1, q - 1)
 
-        # As per the paper: d is the inverse of e mod (p-1)(q-1)/g
-        # This is also known as Carmichael's totient function, lambda(n)
         lambda_n = (p - 1) * (q - 1) // g
 
         e = 65537
 
-        # It's good practice to ensure gcd(e, lambda_n) == 1
-        while self._gcd(e, lambda_n) != 1:
-            # In the astronomically unlikely event e is not coprime, we could pick another
-            # but for 65537 and large primes, this won't happen.
-            # This is more of a theoretical correctness check.
+        # if p eller q is not prime
+        while math.gcd(e, lambda_n) != 1:
             p = self.generate_prime(bit_length // 2)
             q = self.generate_prime(bit_length // 2)
             while p == q:
                 q = self.generate_prime(bit_length // 2)
-            g = self._gcd(p - 1, q - 1)
+            n = p * q
+            g = math.gcd(p - 1, q - 1)
             lambda_n = (p - 1) * (q - 1) // g
 
         d = pow(e, -1, lambda_n)
 
-        # Public key is (N, e)
+
         self.public_key = (n, e)
-        # Private key is (p, q, d) as per the paper
         self.private_key = (p, q, d)
 
     def save_public_key(self, filename="rsa_public.key"):
-        """Saves the public key to a file in JSON format."""
         if self.public_key:
             # Public key is (n, e)
             key_data = {"n": self.public_key[0], "e": self.public_key[1]}
@@ -147,7 +102,6 @@ class RSAKey(CryptoKey):
             self.message_window.display_message(f"Public key saved to {filename}")
 
     def save_private_key(self, filename="rsa_private.key"):
-        """Saves the private key to a file in JSON format."""
         if self.private_key:
             # Private key is (p, q, d)
             key_data = {
@@ -160,27 +114,14 @@ class RSAKey(CryptoKey):
             self.message_window.display_message(f"Private key saved to {filename}")
 
     def sign(self, message):
-        """
-        Signs a message with the private key.
-        :param message: The message to sign (as bytes).
-        :return: The signature as an integer.
-        """
         p, q, d = self.private_key
         n = p * q
-        # Hash the message with SHA-256 and convert the digest to an integer
+
         h = int.from_bytes(hashlib.sha256(message).digest(), byteorder="big")
-        # "Encrypt" the hash with the private key
         signature = pow(h, d, n)
         return signature
 
     def verify(self, message, signature, peer_public_key):
-        """
-        Verifies a signature with a peer's public key.
-        :param message: The original message (as bytes).
-        :param signature: The signature to verify (as an integer).
-        :param peer_public_key: The public key (n, e) of the signer.
-        :return: True if the signature is valid, False otherwise.
-        """
         n, e = peer_public_key
         # Hash the original message
         h = int.from_bytes(hashlib.sha256(message).digest(), byteorder="big")
@@ -191,7 +132,6 @@ class RSAKey(CryptoKey):
 
 
 class KeyManager:
-    """Handles loading and generating RSA keys."""
 
     def __init__(
         self,
@@ -204,8 +144,7 @@ class KeyManager:
         self.rsa_key = None
         self.message_window = message_window or ConsoleWindow()
 
-    def load_or_generate_keys(self, bit_length=2048):
-        """Loads RSA keys from files if they exist, otherwise generates new ones."""
+    def load_keys(self, bit_length=2048):
         try:
             with open(self.private_key_file, "r") as f:
                 private_key_data = json.load(f)
@@ -219,7 +158,7 @@ class KeyManager:
                 private_key_data["d"],
             )
             n = private_key_data["p"] * private_key_data["q"]
-            # Basic validation
+            
             if n != public_key_data["n"]:
                 raise ValueError("Mismatch between public and private key files.")
 
@@ -228,6 +167,7 @@ class KeyManager:
                 public_key_data["e"],
             )
             self.message_window.display_message("RSA keys loaded from files.")
+
         except (FileNotFoundError, json.JSONDecodeError, ValueError) as e:
             self.message_window.display_message(
                 f"Could not load keys ({e}), generating new ones..."
@@ -239,10 +179,8 @@ class KeyManager:
 
 
 class AESCipher:
-    """Handles AES-GCM encryption and decryption for secure communication."""
 
     def __init__(self, key, message_window=None):
-        # Use SHA-256 to derive a 256-bit key from the shared secret
         self.key = hashlib.sha256(str(key).encode()).digest()
         self.message_window = message_window or ConsoleWindow()
 
@@ -252,7 +190,6 @@ class AESCipher:
             plaintext_bytes = plaintext.encode("utf-8")
             cipher = AES.new(self.key, AES.MODE_GCM)
             ciphertext, tag = cipher.encrypt_and_digest(plaintext_bytes)
-            # Return a dictionary of base64 encoded strings for JSON serialization
             return {
                 "nonce": base64.b64encode(cipher.nonce).decode("utf-8"),
                 "ciphertext": base64.b64encode(ciphertext).decode("utf-8"),
@@ -278,10 +215,6 @@ class AESCipher:
 
 
 class DiffieHellman:
-    """
-    Manages the Diffie-Hellman key exchange.
-    Uses pre-defined, safe prime (p) and generator (g) from RFC 3526 (Group 14).
-    """
 
     def __init__(self):
         # 2048-bit MODP Group from RFC 3526 (Group 14)
@@ -307,17 +240,11 @@ class DiffieHellman:
         self._generate_public_key()
 
     def _generate_private_key(self, bit_length=256):
-        """Generates a private key."""
         self.private_key = random.getrandbits(bit_length)
 
     def _generate_public_key(self):
-        """Generates a public key from the private key."""
         self.public_key = pow(self.g, self.private_key, self.p)
 
     def compute_shared_secret(self, peer_public_key):
-        """
-        Computes the shared secret using the peer's public key.
-        :param peer_public_key: The public key from the other party.
-        """
         self.shared_secret = pow(peer_public_key, self.private_key, self.p)
         return self.shared_secret

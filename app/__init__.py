@@ -1,1 +1,1 @@
-from .chat import P2PChat
+from .chat import Chat
