@@ -11,3 +11,4 @@ class ConsoleWindow:
 
     def get_input(self, prompt: str) -> str:
         return input(prompt)
+

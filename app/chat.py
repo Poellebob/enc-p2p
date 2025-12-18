@@ -3,7 +3,7 @@ import json
 import threading
 
 from app.ui import ConsoleWindow
-from app.crypto import KeyManager, AESCipher, DiffieHellman
+from app.crypto import RSAKey, AESCipher, DiffieHellman
 
 
 class Chat:
@@ -12,8 +12,7 @@ class Chat:
         self.sock = None
         self.message_window = ConsoleWindow()
         
-        self.key_manager = KeyManager(message_window=self.message_window)
-        self.rsa_key = self.key_manager.load_keys()
+        self.rsa_key = RSAKey(message_window=self.message_window)
         self.cipher = None
 
     def _send_json(self, data: dict):
@@ -207,3 +206,4 @@ class Chat:
                 self.message_window.display_message("Connection closed.")
         else:
             self.message_window.display_message("Could not establish a secure connection.")
+

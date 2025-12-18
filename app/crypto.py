@@ -10,7 +10,7 @@ from app.ui import ConsoleWindow
 
 
 class Crypto:
-    def _is_prime_miller_rabin(self, n, num_rounds=40):
+    def _is_prime_miller_rabin(self, n, num_rounds=40) -> bool:
         if n == 2 or n == 3:
             return True
         if n <= 1 or n % 2 == 0:
@@ -46,7 +46,7 @@ class Crypto:
         # If all rounds pass, n is probably prime
         return True
 
-    def generate_prime(self, bit_length=1024):
+    def generate_prime(self, bit_length=1024) -> int:
         while True:
             p = random.getrandbits(bit_length)
             
@@ -56,13 +56,49 @@ class Crypto:
                 return p
 
 
-class RSAKey:
-    def __init__(self, bit_length=2048, message_window=None):
+class RSAKey(Crypto):
+    def __init__(self, bit_length=2048, message_window=None, public_key_file="rsa_public.key", private_key_file="rsa_private.key"):
         self.message_window = message_window or ConsoleWindow()
         self.public_key = None
         self.private_key = None
-        if bit_length:
-            self._generate_keys(bit_length)
+        self.public_key_file = public_key_file
+        self.private_key_file = private_key_file
+
+        if not self._load_keys():
+            if bit_length:
+                self._generate_keys(bit_length)
+                self.save_public_key(self.public_key_file)
+                self.save_private_key(self.private_key_file)
+
+    def _load_keys(self):
+        try:
+            with open(self.private_key_file, "r") as f:
+                private_key_data = json.load(f)
+            with open(self.public_key_file, "r") as f:
+                public_key_data = json.load(f)
+
+            self.private_key = (
+                private_key_data["p"],
+                private_key_data["q"],
+                private_key_data["d"],
+            )
+            n = private_key_data["p"] * private_key_data["q"]
+            
+            if n != public_key_data["n"]:
+                raise ValueError("Mismatch between public and private key files.")
+
+            self.public_key = (
+                public_key_data["n"],
+                public_key_data["e"],
+            )
+            self.message_window.display_message("RSA keys loaded from files.")
+            return True
+
+        except (FileNotFoundError, json.JSONDecodeError, ValueError) as e:
+            self.message_window.display_message(
+                f"Could not load keys, generating new ones..."
+            )
+            return False
 
     def _generate_keys(self, bit_length):
         p = self.generate_prime(bit_length // 2)
@@ -113,7 +149,7 @@ class RSAKey:
                 json.dump(key_data, f, indent=4)
             self.message_window.display_message(f"Private key saved to {filename}")
 
-    def sign(self, message):
+    def sign(self, message) -> int:
         p, q, d = self.private_key
         n = p * q
 
@@ -121,7 +157,7 @@ class RSAKey:
         signature = pow(h, d, n)
         return signature
 
-    def verify(self, message, signature, peer_public_key):
+    def verify(self, message, signature, peer_public_key) -> bool:
         n, e = peer_public_key
         # Hash the original message
         h = int.from_bytes(hashlib.sha256(message).digest(), byteorder="big")
@@ -129,54 +165,6 @@ class RSAKey:
         h_from_signature = pow(signature, e, n)
         # The signature is valid if the decrypted hash matches the original hash
         return h == h_from_signature
-
-
-class KeyManager:
-
-    def __init__(
-        self,
-        public_key_file="rsa_public.key",
-        private_key_file="rsa_private.key",
-        message_window=None,
-    ):
-        self.public_key_file = public_key_file
-        self.private_key_file = private_key_file
-        self.rsa_key = None
-        self.message_window = message_window or ConsoleWindow()
-
-    def load_keys(self, bit_length=2048):
-        try:
-            with open(self.private_key_file, "r") as f:
-                private_key_data = json.load(f)
-            with open(self.public_key_file, "r") as f:
-                public_key_data = json.load(f)
-
-            self.rsa_key = RSAKey(bit_length=None, message_window=self.message_window)
-            self.rsa_key.private_key = (
-                private_key_data["p"],
-                private_key_data["q"],
-                private_key_data["d"],
-            )
-            n = private_key_data["p"] * private_key_data["q"]
-            
-            if n != public_key_data["n"]:
-                raise ValueError("Mismatch between public and private key files.")
-
-            self.rsa_key.public_key = (
-                public_key_data["n"],
-                public_key_data["e"],
-            )
-            self.message_window.display_message("RSA keys loaded from files.")
-
-        except (FileNotFoundError, json.JSONDecodeError, ValueError) as e:
-            self.message_window.display_message(
-                f"Could not load keys ({e}), generating new ones..."
-            )
-            self.rsa_key = RSAKey(bit_length=bit_length, message_window=self.message_window)
-            self.rsa_key.save_public_key(self.public_key_file)
-            self.rsa_key.save_private_key(self.private_key_file)
-        return self.rsa_key
-
 
 class AESCipher:
 
@@ -248,3 +236,4 @@ class DiffieHellman:
     def compute_shared_secret(self, peer_public_key):
         self.shared_secret = pow(peer_public_key, self.private_key, self.p)
         return self.shared_secret
+
